@@ -1,12 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/deuxksy/zzizily-gluttony-go/internal/configuration"
@@ -62,146 +58,74 @@ func initProfile() string {
 	if len(profile) <= 0 {
 		profile = "local"
 	}
-	// logger.Debug(profile)
 	return profile
 }
 
-type ChromeVersion struct {
-	Browser string `json:"browser"`
-	ProtocolVersion string `json:"Protocol-Version"`
-	UserAgent string `json:"User-Agent"`
-	V8Version string `json:"V8-Version"`
-	WebkitVersion string `json:"WebKit-Version"`
-	WebSocketDebuggerUrl string `json:"webSocketDebuggerUrl"`
-}
-
-func GetWebSocketDebuggerUrl () string {
-	lsCmd := exec.Command(
-		"/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome",
-		"--user-data-dir=/Users/crong/TEMP/chrome",
-		// "C:/Program Files/Google/Chrome/Application/chrome.exe", 
-		// "--user-data-dir=D:/TEMP/chrome", 
-		"--remote-debugging-port=12222", 
-		"--enable-logging", 
-		"--v=1",
-	)
-	lsCmd.Stdout = os.Stdout
-	lsCmd.Start()
-	resp, err := http.Get("http://localhost:12222/json/version")
-	if err != nil {
-		panic(err)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-	textBytes := []byte(string(body))
-	chromeVersion := ChromeVersion {}
-	if err := json.Unmarshal(textBytes, &chromeVersion); err != nil {
-		panic(err)
-	}
-	return chromeVersion.WebSocketDebuggerUrl
-}
-
-func checkLimit (page *rod.Page) {
-	time.Sleep(time.Millisecond*1000)
-	logger.Debug(page.MustInfo().URL)
-	page.MustScreenshotFullPage("screenshot/CL01.png")
-	logger.Debug("%d", len(page.MustElementsX(`//td[contains(@data-date, "2022-07") and class=".bg-color-blueLight"]`)))
-	// for element := range elements {
-	// 	logger.Debug("%s", element)
-	// 	// MustElement(`div[class="fc-event fc-event-hori fc-event-start fc-event-end bg-color-blueLight"]`).a)
-	// }
-	os.Exit(1)
-}
-
-func initRod() (*rod.Browser) {
+func initRod() *rod.Browser {
 	browser := rod.New().MustConnect()
-	// url := GetWebSocketDebuggerUrl()
-	// browser := rod.New().ControlURL(url).MustConnect()
 	browser.DefaultDevice(devices.IPadMini)
 	return browser
 }
 
-func login (browser *rod.Browser) (*rod.Page) {
-	page := browser.MustPage("https://assist9.i-on.net/login")
+func runLogin(browser *rod.Browser, scene configuration.Scene, idx int) *rod.Page {
+	page := browser.MustPage(scene.Url)
 	logger.Debug(page.MustInfo().URL)
-	// page.MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "01-login", "01"))
-	page.MustWaitLoad().MustElement("input[name=userId]").MustWaitVisible().MustInput(os.Getenv("USERID"))
-	page.MustElement("input[name=userPwd]").MustWaitVisible().MustInput(os.Getenv("USERPW"))
-	
-	page.MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "01-login", "01"))
-	page.MustElement("input[name=userPwd]").MustType(input.Enter)//.MustWaitInvisible()
+
+	userID := os.Getenv("USERID")
+	userPW := os.Getenv("USERPW")
+
+	if userID == "" || userPW == "" {
+		logger.Error("USERID or USERPW environment variables are not set")
+		os.Exit(1)
+	}
+
+	page.MustWaitLoad().MustElement("input[name=userId]").MustWaitVisible().MustInput(userID)
+	page.MustElement("input[name=userPwd]").MustWaitVisible().MustInput(userPW)
+
+	page.MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%02d.png", yyMMddHHmm, scene.Name, idx))
+	page.MustElement("input[name=userPwd]").MustType(input.Enter)
 	return page
 }
 
-func healthcare (page *rod.Page) {
-	page.MustWaitLoad().MustNavigate("https://assist9.i-on.net/rb/main#booking/calendar?resourceId=555a0f1645cee1e334430183")
+func runBooking(page *rod.Page, scene configuration.Scene, idx int) {
+	page.MustWaitLoad().MustNavigate(scene.Url)
 	logger.Debug(page.MustInfo().URL)
-	page.MustWaitLoad().MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "02-healthcare", "01"))
+	page.MustWaitLoad().MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%02d-1.png", yyMMddHHmm, scene.Name, idx))
 
 	if page.MustWaitLoad().MustHas(".bg-color-blue") {
-		page.MustWaitLoad().MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "02-healthcare", "02"))
+		page.MustWaitLoad().MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%02d-2.png", yyMMddHHmm, scene.Name, idx))
 		elements := page.MustElements(`div[class="fc-event fc-event-hori fc-event-start fc-event-end bg-color-blue"]`)
 		elements.Last().MustClick()
 		page.MustWaitLoad().MustElement(`a[class="btn btn-info btn-sm"]`).MustClick()
-		logger.Info("%s", "Complate Healthcare")
+		logger.Info("Complete %s", scene.Name)
 	} else {
-		logger.Warn("%s", "Not Found HealthCare")
+		logger.Warn("Not Found %s", scene.Name)
 	}
-	page.MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "02-healthcare", "03"))
+	page.MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%02d-3.png", yyMMddHHmm, scene.Name, idx))
 }
 
-func lunch (page *rod.Page) {
-	page.MustWaitLoad().MustNavigate("https://assist9.i-on.net/rb/main#booking/calendar?resourceId=554971d845ceac19504bbe46")
-	logger.Debug(page.MustInfo().URL)
-	page.MustWaitLoad().MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "03-lunch", "01"))
-
-	if page.MustWaitLoad().MustHas(".bg-color-blue") {
-		page.MustWaitLoad().MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "03-lunch", "02"))
-		elements := page.MustElements(`div[class="fc-event fc-event-hori fc-event-start fc-event-end bg-color-blue"]`)
-		elements.Last().MustClick()
-		page.MustWaitLoad().MustElement(`a[class="btn btn-info btn-sm"]`).MustClick()
-		logger.Info("%s", "Complate Lunch")
-	} else {
-		logger.Warn("%s", "Not Found Lunch")
-	}
-	page.MustScreenshotFullPage(fmt.Sprintf("screenshot/%s/%s-%s.png", yyMMddHHmm, "03-lunch", "03"))
-}
-
-func PrintCookies(browser *rod.Browser) {
-	logger.Debug("%s", browser.MustVersion().UserAgent)
-	cookies, err := browser.GetCookies()
-	if err != nil {
-		panic(err)
-	}
-	for _, cookie := range cookies {
-		logger.Debug("%s: %s=%s", cookie.Domain, cookie.Name, cookie.Value)
-	}
-}
-
-func GetUserAgent (page *rod.Page) string {
-	if (page == nil) {
-		logger.Error("%s", "Page is NULL")
-		os.Exit(1)
-	}
-	// page.SetUserAgent(&proto.NetworkSetUserAgentOverride{
-	// 	UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36",
-	// 	AcceptLanguage: "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-	// 	Platform: "Windows NT",
-	// 	UserAgentMetadata: &proto.EmulationUserAgentMetadata{
-	// 	},
-	// })
-	return page.MustEval(`()=>window.navigator.userAgent`).String()
-}
-
-func main () {
+func main() {
 	logger.Info("%s", "Gluttony")
 	browser := initRod()
 	defer browser.MustClose()
-	page := login(browser)
-	// logger.Debug("UserAgent: %s", GetUserAgent(page))
-	page.Eval(`window.alert = () => {}`)
-	healthcare(page)
-	lunch(page)
+
+	var page *rod.Page
+
+	for i, scene := range configuration.RuntimeConf.Scenario {
+		logger.Info("Running scene: %s (Type: %s)", scene.Name, scene.Type)
+		switch scene.Type {
+		case "login":
+			page = runLogin(browser, scene, i)
+			// Disable alerts after login
+			page.Eval(`window.alert = () => {}`)
+		case "booking":
+			if page == nil {
+				logger.Error("Cannot run booking scene without a page context (Login first)")
+				continue
+			}
+			runBooking(page, scene, i)
+		default:
+			logger.Warn("Unknown scene type: %s", scene.Type)
+		}
+	}
 }

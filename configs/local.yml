@@ -1,10 +1,10 @@
-Scene:
-  - name: 로그인
+Scenario:
+  - name: Login
     url: https://assist9.i-on.net/login
-    action: move
-  - name: 헬스케어
+    type: login
+  - name: Healthcare
     url: https://assist9.i-on.net/rb/main#booking/calendar?resourceId=555a0f1645cee1e334430183
-    action: move
-  - name: 점심식사
+    type: booking
+  - name: Lunch
     url: https://assist9.i-on.net/rb/main#booking/calendar?resourceId=554971d845ceac19504bbe46
-    action: move
+    type: booking
